@@ -2,8 +2,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import geopandas as gpd
 
-
+#Se importa el archivo desde github
 Df_Calidad_Aire = pd.read_csv("https://raw.githubusercontent.com/manuelzm0811/calidad_aire/refs/heads/main/Calidad_Del_Aire_En_Colombia_(Promedio_Anual)_20251203.csv")
 
 #Objetivo: Evaluar la problematica de la salud publica derivada de la contaminación  del aire en las ciudades colombianas, identificando zonas de mayor riesgo#
@@ -30,14 +31,9 @@ display("Las 5 estaciones con mayor número de días de excedencias son:",mayore
 
 print("---------------------------------------------------------------------------------------------------------------------------------")
 
+
 Estacion_Por_Municipio = Df_Calidad_Aire_limpio_contaminante.value_counts("Estación")
 display(Estacion_Por_Municipio)
 
 print("---------------------------------------------------------------------------------------------------------------------------------")
 display(Df_Calidad_Aire_limpio_contaminante)
-
-
-
-#Identificar y limpiar valores NaN (depurar información).
-#Relacionar días de excedencias vs departamento para saber departamento con mayor contaminación y qué variable es la que más excedencias presenta.
-#Relacionar días de excedencias vs municipio para saber municipio con mayor contaminación y qué variable es la que más excedencias presenta.

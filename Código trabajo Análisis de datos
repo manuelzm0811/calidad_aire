@@ -1,0 +1,43 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+Df_Calidad_Aire = pd.read_csv("https://raw.githubusercontent.com/manuelzm0811/calidad_aire/refs/heads/main/Calidad_Del_Aire_En_Colombia_(Promedio_Anual)_20251203.csv")
+
+#Objetivo: Evaluar la problematica de la salud publica derivada de la contaminación  del aire en las ciudades colombianas, identificando zonas de mayor riesgo#
+
+#Eliminar columnas sin relevancia para el análisis del objetivo, adem{as de renombrar algunas columnas para hacer más compacta la tabla
+Df_Calidad_Aire_limpio = Df_Calidad_Aire.drop(columns=["ID Estacion","Código del Departamento","Código del Municipio","Fechas/horas del máximo","Fechas/horas del mínimo","Ubicacion","Tipo de Estación","Autoridad Ambiental"])
+Df_Calidad_Aire_limpio = Df_Calidad_Aire_limpio.rename(columns={"Nombre del Municipio":"Municipio","Nombre del Departamento":"Departamento"})
+
+#Se hace depuración de la información Eliminando variables meteorológicas y dejamos sólo las contaminantes que son las prescindibles para el análisis
+Df_Calidad_Aire_limpio_contaminante = Df_Calidad_Aire_limpio[~Df_Calidad_Aire_limpio["Variable"].isin(["DViento","PLiquida", "TAire2", "TAire10", "HAire", "HAire2", "HAire10", "VViento", "RGlobal", "P", "RUVb","TAire"])]
+mayor_contaminante= Df_Calidad_Aire_limpio_contaminante.value_counts("Variable")
+display(mayor_contaminante)
+
+print("---------------------------------------------------------------------------------------------------------------------------------")
+#Se hace el conteo de las mediciones hechas, dividiendolas por cantidad de divisón hechas en cada municipio
+Mediciones_Por_Municipio = Df_Calidad_Aire_limpio.value_counts("Municipio")
+display(Mediciones_Por_Municipio)
+
+print("---------------------------------------------------------------------------------------------------------------------------------")
+#Se elige un número arbitrario que en este caso es 5 para hacer una lista de municipios con mayor número de días con excedencias y compactar la tabla para que sea más legible
+mayores_5 = Df_Calidad_Aire_limpio_contaminante.nlargest(5, "Días de excedencias")
+mayores_5_compactado= mayores_5[["Municipio","Días de excedencias"]]
+display("Las 5 estaciones con mayor número de días de excedencias son:",mayores_5_compactado)
+
+print("---------------------------------------------------------------------------------------------------------------------------------")
+
+Estacion_Por_Municipio = Df_Calidad_Aire_limpio_contaminante.value_counts("Estación")
+display(Estacion_Por_Municipio)
+
+print("---------------------------------------------------------------------------------------------------------------------------------")
+display(Df_Calidad_Aire_limpio_contaminante)
+
+
+
+#Identificar y limpiar valores NaN (depurar información).
+#Relacionar días de excedencias vs departamento para saber departamento con mayor contaminación y qué variable es la que más excedencias presenta.
+#Relacionar días de excedencias vs municipio para saber municipio con mayor contaminación y qué variable es la que más excedencias presenta.

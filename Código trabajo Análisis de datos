@@ -1,19 +1,29 @@
+!pip install folium
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import geopandas as gpd
+import folium
+
+
 
 #Se importa el archivo desde github
 Df_Calidad_Aire = pd.read_csv("https://raw.githubusercontent.com/manuelzm0811/calidad_aire/refs/heads/main/Calidad_Del_Aire_En_Colombia_(Promedio_Anual)_20251203.csv")
+display(Df_Calidad_Aire)
+#Objetivo: Evaluar la problematica de la salud publica derivada de la contaminación  del aire en las ciudades colombianas, identificando zonas de mayor riesgo.
 
-#Objetivo: Evaluar la problematica de la salud publica derivada de la contaminación  del aire en las ciudades colombianas, identificando zonas de mayor riesgo#
+#Se formatea la columna Fechas en un Dataframe aparte para usarlo en un gráfico de lineas
+Df_Calidad_Aire["Fechas/horas del máximo"] = pd.to_datetime(Df_Calidad_Aire["Fechas/horas del máximo"], errors="coerce")
 
-#Eliminar columnas sin relevancia para el análisis del objetivo, adem{as de renombrar algunas columnas para hacer más compacta la tabla
+#Se Eliminan columnas sin relevancia para el análisis del objetivo, además de renombrar algunas columnas para hacer más compacta la tabla.
 Df_Calidad_Aire_limpio = Df_Calidad_Aire.drop(columns=["ID Estacion","Código del Departamento","Código del Municipio","Fechas/horas del máximo","Fechas/horas del mínimo","Ubicacion","Tipo de Estación","Autoridad Ambiental"])
 Df_Calidad_Aire_limpio = Df_Calidad_Aire_limpio.rename(columns={"Nombre del Municipio":"Municipio","Nombre del Departamento":"Departamento"})
+display(Df_Calidad_Aire_limpio)
 
-#Se hace depuración de la información Eliminando variables meteorológicas y dejamos sólo las contaminantes que son las prescindibles para el análisis
+print("---------------------------------------------------------------------------------------------------------------------------------")
+#Se hace depuración de la información Eliminando variables meteorológicas y dejamos sólo las contaminantes que son las prescindibles para el análisis.
 Df_Calidad_Aire_limpio_contaminante = Df_Calidad_Aire_limpio[~Df_Calidad_Aire_limpio["Variable"].isin(["DViento","PLiquida", "TAire2", "TAire10", "HAire", "HAire2", "HAire10", "VViento", "RGlobal", "P", "RUVb","TAire"])]
 mayor_contaminante= Df_Calidad_Aire_limpio_contaminante.value_counts("Variable")
 display(mayor_contaminante)
@@ -24,16 +34,66 @@ Mediciones_Por_Municipio = Df_Calidad_Aire_limpio.value_counts("Municipio")
 display(Mediciones_Por_Municipio)
 
 print("---------------------------------------------------------------------------------------------------------------------------------")
-#Se elige un número arbitrario que en este caso es 5 para hacer una lista de municipios con mayor número de días con excedencias y compactar la tabla para que sea más legible
-mayores_5 = Df_Calidad_Aire_limpio_contaminante.nlargest(5, "Días de excedencias")
-mayores_5_compactado= mayores_5[["Municipio","Días de excedencias"]]
-display("Las 5 estaciones con mayor número de días de excedencias son:",mayores_5_compactado)
-
-print("---------------------------------------------------------------------------------------------------------------------------------")
-
-
+#Se hace el conteo de estaciones por municipio
 Estacion_Por_Municipio = Df_Calidad_Aire_limpio_contaminante.value_counts("Estación")
 display(Estacion_Por_Municipio)
 
 print("---------------------------------------------------------------------------------------------------------------------------------")
+#Se elige un número arbitrario que en este caso es 3 para hacer una lista de municipios con mayor número de días con excedencias y compactar la tabla para que sea más legible, además se eliminan los municipios duplicados en el resulado.
+mayores_3 = Df_Calidad_Aire_limpio_contaminante.groupby("Municipio")["Días de excedencias"].max().sort_values(ascending=False)
+mayores_3_Df = mayores_3.reset_index()
+mayores_3_Df.drop_duplicates(subset="Municipio", inplace=True)
+display("Los 3 Municipios con más días de excedencias anuales son: ",mayores_3_Df.head(3))
+
+print("---------------------------------------------------------------------------------------------------------------------------------")
 display(Df_Calidad_Aire_limpio_contaminante)
+
+print("---------------------------------------------------------------------------------------------------------------------------------")
+#Digrama de barras por contaminante y frecuencia, donde contaminante es el contaminante medido y la frecuencia es la cantidad de veces que este contaminante medido sobrepaso los días de excedencia
+contaminante_filtrado = Df_Calidad_Aire_limpio_contaminante[Df_Calidad_Aire_limpio_contaminante["Días de excedencias"] > 0]
+contaminante_grafico = contaminante_filtrado["Variable"].value_counts()
+contaminante_grafico.plot(kind="bar", color="#90EE90", title="Frecuencia de contaminantes con excedencias")
+plt.xlabel("Contaminante")
+plt.ylabel("Frecuencia")
+plt.show()
+
+print("---------------------------------------------------------------------------------------------------------------------------------")
+#Gráfico de barras con la medición más actual 2024 de días de excedencias en las ciudades con mayor contaminación
+mayores = mayores_3_Df.groupby("Municipio")["Días de excedencias"].max().sort_values(ascending=False)
+mayores.head(4).plot(kind="bar", color="#90EE90",title="Municipios con más agrupaciones de días de excedencia en calidad del aire")
+plt.ylabel("Días de excedencias")
+plt.show()
+
+#Generamos un mapa para mostrar la ubicación de ls diferentes estaciones
+print("----------------------------------------------------------------------------------------------------------------------------------")
+coordenadas_unicas = Df_Calidad_Aire_limpio_contaminante[["Latitud", "Longitud"]].dropna().drop_duplicates()
+mapa = folium.Map(location=[4.5, -74], zoom_start=6)
+
+for _, row in coordenadas_unicas.iterrows():
+    folium.CircleMarker(
+        location=[row["Latitud"], row["Longitud"]],
+        radius=3,
+        color="green",
+        fill=True,
+        fill_opacity=0.6
+    ).add_to(mapa)
+
+display(mapa)
+#Se crean diagramas de lineas para mostrar el comportamiento de los contaminantes
+print("----------------------------------------------------------------------------------------------------------------------------------")
+municipios = Df_Calidad_Aire["Nombre del Municipio"].dropna().unique()
+
+for municipio in municipios[:5]:
+    data = Df_Calidad_Aire[Df_Calidad_Aire["Nombre del Municipio"] == municipio]
+
+    serie = data.groupby(
+        data["Fechas/horas del máximo"].dt.date
+    )["Días de excedencias"].sum()
+
+    plt.figure(figsize=(8,4))
+    plt.plot(serie)
+    plt.title(f"Días de excedencia en {municipio}")
+    plt.xlabel("Fecha")
+    plt.ylabel("Excedencias")
+    plt.tight_layout()
+    plt.show()

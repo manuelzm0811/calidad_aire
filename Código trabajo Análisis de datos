@@ -1,5 +1,3 @@
-!pip install folium
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,11 +13,11 @@ display(Df_Calidad_Aire)
 #Objetivo: Evaluar la problematica de la salud publica derivada de la contaminación  del aire en las ciudades colombianas, identificando zonas de mayor riesgo.
 
 #Se formatea la columna Fechas en un Dataframe aparte para usarlo en un gráfico de lineas
-Df_Calidad_Aire["Fechas/horas del máximo"] = pd.to_datetime(Df_Calidad_Aire["Fechas/horas del máximo"], errors="coerce")
-
 #Se Eliminan columnas sin relevancia para el análisis del objetivo, además de renombrar algunas columnas para hacer más compacta la tabla.
 Df_Calidad_Aire_limpio = Df_Calidad_Aire.drop(columns=["ID Estacion","Código del Departamento","Código del Municipio","Fechas/horas del máximo","Fechas/horas del mínimo","Ubicacion","Tipo de Estación","Autoridad Ambiental"])
 Df_Calidad_Aire_limpio = Df_Calidad_Aire_limpio.rename(columns={"Nombre del Municipio":"Municipio","Nombre del Departamento":"Departamento"})
+Df_Calidad_Aire = Df_Calidad_Aire.rename(columns={"Fechas/horas del máximo":"Fecha"})
+Df_Calidad_Aire["Fecha"] = pd.to_datetime(Df_Calidad_Aire["Fecha"], errors="coerce")
 display(Df_Calidad_Aire_limpio)
 
 print("---------------------------------------------------------------------------------------------------------------------------------")
@@ -81,19 +79,38 @@ for _, row in coordenadas_unicas.iterrows():
 display(mapa)
 #Se crean diagramas de lineas para mostrar el comportamiento de los contaminantes
 print("----------------------------------------------------------------------------------------------------------------------------------")
-municipios = Df_Calidad_Aire["Nombre del Municipio"].dropna().unique()
 
-for municipio in municipios[:5]:
-    data = Df_Calidad_Aire[Df_Calidad_Aire["Nombre del Municipio"] == municipio]
 
-    serie = data.groupby(
-        data["Fechas/horas del máximo"].dt.date
-    )["Días de excedencias"].sum()
+#Se crea una copia del df bas, se crea la columna Año y se extraen los valores faltantes
+df = Df_Calidad_Aire.copy()
 
-    plt.figure(figsize=(8,4))
-    plt.plot(serie)
-    plt.title(f"Días de excedencia en {municipio}")
-    plt.xlabel("Fecha")
-    plt.ylabel("Excedencias")
-    plt.tight_layout()
-    plt.show()
+df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+df["Año"] = df["Fecha"].dt.year
+
+df = df.dropna(subset=["Variable", "Nombre del Municipio", "Año", "Días de excedencias"])
+df["Año"] = df["Año"].astype(int)
+df["Días de excedencias"] = pd.to_numeric(df["Días de excedencias"], errors="coerce")
+
+
+ciudades = ["BOGOTÁ, D.C.", "MEDELLÍN", "CALI"]
+df_ciudades = df[df["Nombre del Municipio"].isin(ciudades)]
+heat_variable = df.groupby(["Variable", "Año"])["Días de excedencias"].sum().unstack()
+heat_variable = heat_variable.fillna(0).sort_index(axis=1)
+
+heat_variable = heat_variable.loc[heat_variable.sum(axis=1).sort_values(ascending=False).index]
+
+plt.figure(figsize=(12, 6))
+sns.heatmap(
+    heat_variable,
+    cmap="YlOrRd",
+    annot=True,
+    fmt=".0f",
+    linewidths=0.3
+)
+plt.title("Diagrama de calor por CONTAMINANTE (Días de excedencias)")
+plt.xlabel("Año")
+plt.ylabel("Contaminante")
+plt.tight_layout()
+plt.show()
+
+

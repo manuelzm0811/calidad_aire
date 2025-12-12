@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import geopandas as gpd
 import folium
-
-
+from folium.plugins import HeatMap
+import branca.colormap as cm
 
 #Se importa el archivo desde github
 Df_Calidad_Aire = pd.read_csv("https://raw.githubusercontent.com/manuelzm0811/calidad_aire/refs/heads/main/Calidad_Del_Aire_En_Colombia_(Promedio_Anual)_20251203.csv")
@@ -18,6 +18,7 @@ Df_Calidad_Aire_limpio = Df_Calidad_Aire.drop(columns=["ID Estacion","Código de
 Df_Calidad_Aire_limpio = Df_Calidad_Aire_limpio.rename(columns={"Nombre del Municipio":"Municipio","Nombre del Departamento":"Departamento"})
 Df_Calidad_Aire = Df_Calidad_Aire.rename(columns={"Fechas/horas del máximo":"Fecha"})
 Df_Calidad_Aire["Fecha"] = pd.to_datetime(Df_Calidad_Aire["Fecha"], errors="coerce")
+Df_Calidad_Aire['Año'] = pd.to_datetime(Df_Calidad_Aire['Fecha'], errors='coerce').dt.year
 display(Df_Calidad_Aire_limpio)
 
 print("---------------------------------------------------------------------------------------------------------------------------------")
@@ -62,8 +63,9 @@ mayores.head(4).plot(kind="bar", color="#90EE90",title="Municipios con más agru
 plt.ylabel("Días de excedencias")
 plt.show()
 
-#Generamos un mapa para mostrar la ubicación de ls diferentes estaciones
+
 print("----------------------------------------------------------------------------------------------------------------------------------")
+#Generamos un mapa para mostrar la ubicación de ls diferentes estaciones
 coordenadas_unicas = Df_Calidad_Aire_limpio_contaminante[["Latitud", "Longitud"]].dropna().drop_duplicates()
 mapa = folium.Map(location=[4.5, -74], zoom_start=6)
 
@@ -77,11 +79,63 @@ for _, row in coordenadas_unicas.iterrows():
     ).add_to(mapa)
 
 display(mapa)
+print("---------------------------------------------------------------------------------------------------------------------------")
 #Se crean diagramas de lineas para mostrar el comportamiento de los contaminantes
+# Se normalizan los nombres del municipio convirtiéndolos a mayúsculas y eliminando espacios sobrantes
+Df_Calidad_Aire['Nombre del Municipio'] = Df_Calidad_Aire['Nombre del Municipio'].str.upper().str.strip()
+
+# Se convierte la columna Año a valores numéricos para permitir operaciones de análisis temporal
+Df_Calidad_Aire['Año'] = pd.to_numeric(Df_Calidad_Aire['Año'], errors='coerce')
+
+# Se agrupan los datos por municipio y año para sumar los días de excedencias registrados en cada caso
+df_grouped = (
+    Df_Calidad_Aire
+    .groupby(['Nombre del Municipio', 'Año'])['Días de excedencias']
+    .sum()
+    .reset_index()
+)
+
+# Se filtran únicamente los registros correspondientes a Medellín, Bogotá y Cali, que son las ciudades de interés
+df_grouped = df_grouped[
+    df_grouped['Nombre del Municipio'].str.contains('MEDELL|BOGOT|CALI', regex=True)
+]
+
+# Se separan los datos por municipio para construir las series individuales de cada ciudad
+df_med = df_grouped[df_grouped['Nombre del Municipio'].str.contains('MEDELL')].sort_values('Año')
+df_bog = df_grouped[df_grouped['Nombre del Municipio'].str.contains('BOGOT')].sort_values('Año')
+df_cal = df_grouped[df_grouped['Nombre del Municipio'].str.contains('CALI')].sort_values('Año')
+
+# Se genera la figura donde se mostrarán las líneas comparativas entre ciudades
+plt.figure(figsize=(10,6))
+
+# Se dibuja la línea correspondiente a Medellín
+plt.plot(df_med['Año'], df_med['Días de excedencias'], marker='o', label='MEDELLÍN')
+
+# Se dibuja la línea correspondiente a Bogotá
+plt.plot(df_bog['Año'], df_bog['Días de excedencias'], marker='o', label='BOGOTÁ D.C.')
+
+# Se dibuja la línea correspondiente a Cali
+plt.plot(df_cal['Año'], df_cal['Días de excedencias'], marker='o', label='CALI')
+
+# Se establecen las etiquetas del eje X utilizando todos los años disponibles en el conjunto de datos
+anios = sorted(df_grouped['Año'].dropna().unique())
+plt.xticks(anios, rotation=45)
+
+# Se configuran los elementos visuales de la gráfica: título, ejes, leyenda, cuadrícula y ajustes finales
+plt.title('Evolución de Días de Excedencias por Ciudad')
+plt.xlabel('Año')
+plt.ylabel('Días de Excedencias')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+
+# Se muestra la gráfica resultante
+plt.show()
+
 print("----------------------------------------------------------------------------------------------------------------------------------")
 
 
-#Se crea una copia del df bas, se crea la columna Año y se extraen los valores faltantes
+#Se crea una copia del date frame base, se crea la columna Año y se extraen los valores necesarios
 df = Df_Calidad_Aire.copy()
 
 df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
@@ -111,6 +165,108 @@ plt.title("Diagrama de calor por CONTAMINANTE (Días de excedencias)")
 plt.xlabel("Año")
 plt.ylabel("Contaminante")
 plt.tight_layout()
+plt.show()
+
+print("-----------------------------------------------------------------------------------------------------------------------------------")
+
+# Se seleccionan las columnas necesarias y se eliminan las filas con valores faltantes
+df = Df_Calidad_Aire_limpio_contaminante[["Latitud", "Longitud", "Días de excedencias"]].dropna()
+
+# Se agrupan las mediciones por coordenadas para que cada estación tenga un solo valor acumulado
+df_grouped = df.groupby(["Latitud", "Longitud"], as_index=False)["Días de excedencias"].sum()
+
+# Se normaliza la intensidad del mapa de calor para evitar saturación visual
+max_val = df_grouped["Días de excedencias"].max()
+if max_val == 0:
+    df_grouped["peso_norm"] = 0.0
+else:
+    df_grouped["peso_norm"] = df_grouped["Días de excedencias"] / max_val
+
+# Se preparan los datos finales del HeatMap con latitud, longitud e intensidad normalizada
+heat_data = df_grouped[["Latitud", "Longitud", "peso_norm"]].values.tolist()
+
+# Se genera el mapa base centrado en Colombia con estilo estándar
+mapa = folium.Map(location=[4.5, -74], zoom_start=6, tiles="OpenStreetMap")
+
+# Se añade el HeatMap al mapa utilizando el peso normalizado para representar intensidad
+HeatMap(
+    heat_data,
+    radius=10,
+    blur=8,
+    min_opacity=0.3,
+    max_zoom=12,
+).add_to(mapa)
+
+# Se crea y agrega una escala de colores que representa los días de excedencia por estación
+colormap = cm.LinearColormap(
+    colors=["green", "yellow", "orange", "red", "darkred"],
+    vmin=0, vmax=max_val,
+    caption="Días de excedencias (total por estación)"
+)
+colormap.add_to(mapa)
+
+# Se muestra el mapa en pantalla
+display(mapa)
+
+print("-----------------------------------------------------------------------------------------------------------------------------------")
+
+#Se crea una función para agrupar los Municipios Principales
+def agrupar_municipio(nombre):
+    if pd.isna(nombre):
+        return None
+    
+    n = nombre.upper().strip()
+
+    if "MEDE" in n:
+        return "MEDELLIN"
+    if "BOGOT" in n:
+        return "BOGOTA"
+    if "CALI" in n:
+        return "CALI"
+    if "ITAG" in n:
+        return "ITAGUI"
+
+    return n
+
+#Se crea una nueva columna con los municipios agrupados
+Df_Calidad_Aire["Municipio_Agrupado"] = Df_Calidad_Aire["Nombre del Municipio"].apply(agrupar_municipio)
+
+#Se hace el conteo nuevamente
+Mediciones_Por_Municipio = Df_Calidad_Aire["Municipio_Agrupado"].value_counts()
+
+#Se crea la lista de los 10 municipios con más mediciones
+top10 = Mediciones_Por_Municipio.head(10)
+
+#Se le da formato más estético a la tabla
+fig, ax = plt.subplots(figsize=(7, 4))
+ax.axis('tight')
+ax.axis('off')
+
+tabla = ax.table(
+    cellText=top10.values.reshape(-1,1),
+    rowLabels=top10.index,
+    colLabels=["Mediciones Totales Por Municipio"],
+    loc='center',
+    cellLoc='center'
+)
+
+tabla.auto_set_font_size(False)
+tabla.set_fontsize(11)
+tabla.scale(0.8, 1.3)
+
+for key, cell in tabla.get_celld().items():
+    row, col = key
+    if row == 0: 
+        cell.set_facecolor("#4CAF50") 
+        cell.set_text_props(color="white", weight="bold")
+    else:
+        if row % 2 == 0:
+            cell.set_facecolor("#F2F2F2")  
+
+    cell.set_edgecolor("gray")
+    cell.set_linewidth(0.5)
+
+plt.title("Top 10 municipios con más mediciones", fontsize=14, weight="bold")
 plt.show()
 
 
